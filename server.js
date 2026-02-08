@@ -3,6 +3,7 @@
  * 通过调用 najie-flow CLI 提供 API
  */
 
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { spawn } from 'child_process'
@@ -30,16 +31,24 @@ function getCLIPath() {
 
 function runCLI(args, options = {}) {
   return new Promise((resolve, reject) => {
-    const nodeCmd = process.execPath
     const cliPath = getCLIPath()
-    const fullArgs = [cliPath, ...args]
     
-    console.log(`[CLI] node ${fullArgs.join(' ')}`)
+    // 如果 CLI 路径是 .js 文件，使用 node 执行
+    let command, commandArgs
+    if (cliPath.endsWith('.js')) {
+      command = process.execPath
+      commandArgs = [cliPath, ...args]
+      console.log(`[CLI] node ${cliPath} ${args.join(' ')}`)
+    } else {
+      command = cliPath
+      commandArgs = args
+      console.log(`[CLI] ${cliPath} ${args.join(' ')}`)
+    }
     
-    const child = spawn(nodeCmd, fullArgs, {
+    const child = spawn(command, commandArgs, {
       cwd: options.cwd || __dirname,
       env: { ...process.env, FORCE_COLOR: '0' },
-      shell: false
+      shell: true
     })
     
     let stdout = '', stderr = ''
