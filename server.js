@@ -13,6 +13,30 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// 获取数据目录：优先使用命令行参数，其次使用环境变量
+function getDataDir() {
+  // 从命令行参数获取 --data-dir
+  const args = process.argv.slice(2)
+  const dataDirIndex = args.indexOf('--data-dir')
+  if (dataDirIndex !== -1 && args[dataDirIndex + 1]) {
+    return args[dataDirIndex + 1]
+  }
+  
+  // 从环境变量获取
+  if (process.env.NAJIE_USER_DATA_PATH) {
+    return process.env.NAJIE_USER_DATA_PATH
+  }
+  
+  return null
+}
+
+const DATA_DIR = getDataDir()
+if (DATA_DIR) {
+  console.log(`[数据目录] ${DATA_DIR}`)
+} else {
+  console.log('[数据目录] 未指定，使用默认配置')
+}
+
 const app = express()
 const PORT = 5176
 
@@ -33,22 +57,34 @@ function runCLI(args, options = {}) {
   return new Promise((resolve, reject) => {
     const cliPath = getCLIPath()
     
+    // 添加数据目录参数
+    const finalArgs = [...args]
+    if (DATA_DIR) {
+      finalArgs.push('--data-dir', DATA_DIR)
+    }
+    
     // 如果 CLI 路径是 .js 文件，使用 node 执行
     let command, commandArgs
     if (cliPath.endsWith('.js')) {
       command = process.execPath
-      commandArgs = [cliPath, ...args]
-      console.log(`[CLI] node ${cliPath} ${args.join(' ')}`)
+      commandArgs = [cliPath, ...finalArgs]
+      console.log(`[CLI] node ${cliPath} ${finalArgs.join(' ')}`)
     } else {
       command = cliPath
-      commandArgs = args
-      console.log(`[CLI] ${cliPath} ${args.join(' ')}`)
+      commandArgs = finalArgs
+      console.log(`[CLI] ${cliPath} ${finalArgs.join(' ')}`)
+    }
+    
+    // 准备环境变量
+    const envVars = { ...process.env, FORCE_COLOR: '0' }
+    if (DATA_DIR) {
+      envVars.NAJIE_USER_DATA_PATH = DATA_DIR
     }
     
     const child = spawn(command, commandArgs, {
       cwd: options.cwd || __dirname,
-      env: { ...process.env, FORCE_COLOR: '0' },
-      shell: true
+      env: envVars,
+      shell: false
     })
     
     let stdout = '', stderr = ''
@@ -66,63 +102,7 @@ function runCLI(args, options = {}) {
   })
 }
 
-function parseFlowList(output) {
-  const flows = []
-  const lines = output.split('\n')
-  let currentGroup = null
-  
-  for (const line of lines) {
-    if (line.match(/\s+(.+)/)) { currentGroup = line.match(/\s+(.+)/)[1].trim(); continue }
-    if (line.includes(' 未分组')) { currentGroup = null; continue }
-    const m = line.match(/^\s+(\S+)\s{2,}(.+)$/)
-    if (m && !line.includes('ℹ') && !line.includes('找到')) {
-      flows.push({ id: m[1].trim(), name: m[2].trim(), group: currentGroup })
-    }
-  }
-  return flows
-}
-
-function parseFlowShow(output) {
-  const info = { nodes: [] }
-  const lines = output.split('\n')
-  
-  for (const line of lines) {
-    if (line.includes('ID:')) info.id = line.split('ID:')[1]?.trim()
-    if (line.includes('名称:')) info.name = line.split('名称:')[1]?.trim()
-    if (line.includes('节点数:')) info.nodeCount = parseInt(line.split('节点数:')[1]) || 0
-    if (line.includes('边数:')) info.edgeCount = parseInt(line.split('边数:')[1]) || 0
-  }
-  
-  let inNodes = false
-  for (const line of lines) {
-    if (line.includes('节点列表')) { inNodes = true; continue }
-    if (inNodes && line.includes('-')) {
-      const m = line.match(/-\s+(\S+)\s+\((\S+)\):\s+(.+)/)
-      if (m) info.nodes.push({ id: m[1], type: m[2], label: m[3] })
-    }
-  }
-  return info
-}
-
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }))
-
-app.get('/api/flows', async (req, res) => {
-  try {
-    const result = await runCLI(['list'])
-    res.json(result.success 
-      ? { success: true, data: parseFlowList(result.output) }
-      : { success: false, error: result.error })
-  } catch (e) { res.status(500).json({ success: false, error: e.message }) }
-})
-
-app.get('/api/flows/:id', async (req, res) => {
-  try {
-    const result = await runCLI(['show', req.params.id, '-e'])
-    res.json(result.success
-      ? { success: true, data: parseFlowShow(result.output) }
-      : { success: false, error: result.error })
-  } catch (e) { res.status(500).json({ success: false, error: e.message }) }
-})
 
 app.post('/api/flows/:id/run', async (req, res) => {
   try {
