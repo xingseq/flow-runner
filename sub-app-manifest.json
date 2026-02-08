@@ -1,0 +1,26 @@
+{
+  "$schema": "https://najie.app/schemas/sub-app-manifest.json",
+  "name": "flow-runner",
+  "displayName": "流程运行器",
+  "version": "1.0.0",
+  "description": "流程图执行工具 - 可视化管理和执行流程图",
+  "required": false,
+  "capabilities": ["flow:list", "flow:show", "flow:run"],
+  "cli": { "enabled": false },
+  "api": { "enabled": false },
+  "ui": {
+    "enabled": true,
+    "port": 5176,
+    "startCommand": "npm run subapp",
+    "stopCommand": "npm run subapp:stop",
+    "entry": "./ui/dist/index.html",
+    "devServer": { "port": 5176 },
+    "buildCommand": "npm run build",
+    "requireBuild": true,
+    "routes": [
+      { "path": "/", "name": "流程图列表" },
+      { "path": "/run", "name": "执行流程图" }
+    ]
+  },
+  "dependencies": { "runtime": [] }
+}
